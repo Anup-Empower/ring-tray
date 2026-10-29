@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ring tray</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --velvet:#24312B; --velvet-2:#1B2521; --ivory:#F6F1E8; --ivory-dim:rgba(246,241,232,.62);
+    --brass:#C9A45C; --rose:#C88C86; --line:rgba(246,241,232,.14);
+    --serif:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+    --sans:"Figtree",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--velvet);color:var(--ivory);font-family:var(--sans);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;overscroll-behavior:none}
+  .app{max-width:520px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;padding:20px 20px calc(20px + env(safe-area-inset-bottom))}
+  h1,h2{font-family:var(--serif);font-weight:400;margin:0;line-height:1.1}
+  h1{font-size:44px}
+  h2{font-size:30px}
+  p{margin:0}
+  .muted{color:var(--ivory-dim)}
+  .screen{display:none;flex:1;flex-direction:column}
+  .screen.on{display:flex}
+  button{font:inherit;cursor:pointer;border:0;background:none;color:inherit;padding:0}
+  .btn{border:1px solid var(--line);border-radius:999px;padding:12px 20px;font-weight:500;background:transparent;color:var(--ivory);transition:background .15s}
+  .btn:hover{background:rgba(246,241,232,.06)}
+  .btn.solid{background:var(--ivory);color:var(--velvet);border-color:var(--ivory)}
+  .btn.solid:hover{background:#fff}
+  .btn:disabled{opacity:.4;cursor:default}
+  .btn:focus-visible,.act:focus-visible,.link:focus-visible{outline:2px solid var(--brass);outline-offset:3px}
+  .link{text-decoration:underline;text-underline-offset:3px;color:var(--ivory-dim)}
+  .link:hover{color:var(--ivory)}
+  .stack>*+*{margin-top:16px}
+  textarea,input[type=text]{width:100%;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;background:var(--velvet-2);color:var(--ivory);border:1px solid var(--line);border-radius:10px;padding:12px;resize:vertical}
+  textarea{min-height:150px}
+  .field{display:flex;flex-direction:column;gap:8px}
+  .field label{font-weight:500}
+  .file{border:1px dashed rgba(246,241,232,.3);border-radius:10px;padding:14px;color:var(--ivory-dim);cursor:pointer}
+  .file input{display:none}
+  .status{font-size:14px;color:var(--ivory-dim)}
+  .status b{color:var(--brass);font-weight:500}
+
+  /* swipe */
+  .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px}
+  .count{font-family:var(--serif);font-size:22px}
+  .count small{font-size:15px;color:var(--ivory-dim);font-family:var(--sans)}
+  .bar{height:2px;background:var(--line);border-radius:2px;overflow:hidden;margin-bottom:22px}
+  .bar i{display:block;height:100%;background:var(--brass);width:0;transition:width .25s}
+  .tray{position:relative;flex:1;min-height:380px;display:flex;align-items:center;justify-content:center;touch-action:none}
+  .card{position:absolute;inset:0;margin:auto;width:100%;max-width:400px;aspect-ratio:4/5;max-height:100%;border-radius:22px;background:#fff;box-shadow:0 30px 60px -20px rgba(0,0,0,.7),0 0 0 1px rgba(0,0,0,.2);overflow:hidden;user-select:none;-webkit-user-select:none;will-change:transform}
+  .card.back{transform:scale(.94) translateY(16px);box-shadow:0 10px 30px -20px rgba(0,0,0,.6)}
+  .card.leave{transition:transform .35s cubic-bezier(.2,.7,.2,1),opacity .35s}
+  .card img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;background:#fff}
+  .stamp{position:absolute;top:22px;padding:6px 14px;border:2px solid;border-radius:8px;font-family:var(--serif);font-size:26px;letter-spacing:.02em;opacity:0;transform:rotate(-12deg);transition:opacity .1s}
+  .stamp.yes{left:20px;color:#2F6B4F;border-color:#2F6B4F}
+  .stamp.no{right:20px;color:#A64B44;border-color:#A64B44;transform:rotate(12deg)}
+  .stamp.love{left:50%;top:40%;transform:translateX(-50%);color:#9A7328;border-color:#9A7328}
+  .acts{display:flex;justify-content:center;align-items:center;gap:22px;margin-top:22px}
+  .act{width:64px;height:64px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;transition:transform .12s,background .12s}
+  .act:hover{transform:scale(1.06)}
+  .act svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .act.no{color:var(--rose)}
+  .act.yes{color:#8FC7A8}
+  .act.love{color:var(--brass);width:76px;height:76px}
+  .act.love svg{width:32px;height:32px}
+  .hint{text-align:center;font-size:13px;color:var(--ivory-dim);margin-top:14px}
+  .undo{font-size:14px;color:var(--ivory-dim)}
+
+  /* pairs */
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1;align-content:center}
+  .pick{border-radius:18px;background:#fff;aspect-ratio:4/5;overflow:hidden;box-shadow:0 20px 40px -20px rgba(0,0,0,.7);transition:transform .12s}
+  .pick:hover{transform:translateY(-3px)}
+  .pick img{width:100%;height:100%;object-fit:contain;display:block}
+  .or{text-align:center;font-family:var(--serif);font-style:italic;font-size:22px;color:var(--ivory-dim);margin:18px 0 6px}
+
+  /* results */
+  .kpi{display:flex;gap:28px;margin:18px 0 6px}
+  .kpi div{font-family:var(--serif);font-size:38px;line-height:1}
+  .kpi span{display:block;font-family:var(--sans);font-size:13px;color:var(--ivory-dim);margin-top:6px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;font-weight:500;color:var(--ivory-dim);padding:6px 0;border-bottom:1px solid var(--line)}
+  td{padding:7px 0;border-bottom:1px solid rgba(246,241,232,.07)}
+  td.n{text-align:right;color:var(--ivory-dim)}
+  td.r{text-align:right}
+  .meter{display:inline-block;width:70px;height:6px;background:var(--line);border-radius:3px;vertical-align:middle;margin-right:8px;overflow:hidden}
+  .meter i{display:block;height:100%;background:var(--brass)}
+  .attr{margin-top:26px}
+  .attr h3{font-family:var(--serif);font-weight:400;font-size:24px;margin:0 0 6px}
+  .rank{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+  .rank figure{margin:0;background:#fff;border-radius:12px;overflow:hidden;aspect-ratio:1;position:relative}
+  .rank img{width:100%;height:100%;object-fit:contain;display:block}
+  .rank figcaption{position:absolute;left:8px;bottom:6px;font-family:var(--serif);font-size:20px;color:var(--velvet);background:rgba(255,255,255,.85);padding:0 8px;border-radius:6px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .done-art{font-family:var(--serif);font-size:120px;line-height:1;text-align:center;color:var(--brass);margin:40px 0 10px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SETUP -->
+  <section class="screen" id="setup">
+    <div class="stack">
+      <h1>Ring tray</h1>
+      <p class="muted">Load the rings, then hand over the phone. Two rounds: a quick swipe through everything, then head‑to‑head picks among the favourites.</p>
+
+      <div class="field">
+        <label class="file" id="csvLabel">Upload ring list (rings.csv)
+          <input type="file" id="csvFile" accept=".csv,text/csv">
+        </label>
+        <label for="csv">…or paste the CSV here</label>
+        <textarea id="csv" spellcheck="false" placeholder="id,image,era,cut,stone,setting,metal,details,band,size,type"></textarea>
+        <p class="status">One row per ring. <code>image</code> is a URL or a filename from the folder you pick below. Every other column is an attribute you'll see in the results. Add or drop columns freely.</p>
+      </div>
+
+      <label class="file" id="fileLabel">Choose image files (optional, for local photos)
+        <input type="file" id="files" multiple accept="image/*">
+      </label>
+
+      <p class="status" id="setupStatus"></p>
+
+      <div class="row">
+        <button class="btn solid" id="startBtn">Start swiping</button>
+        <button class="btn" id="sampleBtn">Load sample</button>
+        <button class="btn" id="resultsBtn">See results</button>
+      </div>
+      <p><button class="link" id="resetBtn">Clear everything and start over</button></p>
+    </div>
+  </section>
+
+  <!-- SWIPE -->
+  <section class="screen" id="swipe">
+    <div class="top">
+      <div class="count"><span id="cur">1</span> <small>of <span id="tot">200</span></small></div>
+      <button class="undo link" id="undoBtn">Undo last</button>
+    </div>
+    <div class="bar"><i id="prog"></i></div>
+    <div class="tray" id="tray"></div>
+    <div class="acts">
+      <button class="act no" id="noBtn" aria-label="No"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button class="act love" id="loveBtn" aria-label="Love it"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 8.3a4.2 4.2 0 0 1 7.5 2.2c0 5.4-7.5 10-7.5 10z"/></svg></button>
+      <button class="act yes" id="yesBtn" aria-label="Yes"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+    </div>
+    <p class="hint">Swipe right for yes, left for no, up if you love it. Go with your gut.</p>
+  </section>
+
+  <!-- PAIRS -->
+  <section class="screen" id="pairs">
+    <div class="top">
+      <div class="count"><span id="pcur">1</span> <small>of <span id="ptot">32</span></small></div>
+      <span class="undo">Round two</span>
+    </div>
+    <div class="bar"><i id="pprog"></i></div>
+    <h2>Which one?</h2>
+    <p class="or">this one, or that one</p>
+    <div class="pair">
+      <button class="pick" id="pickA"><img alt="Ring A"></button>
+      <button class="pick" id="pickB"><img alt="Ring B"></button>
+    </div>
+    <p class="hint">Tap the one you'd rather wear.</p>
+  </section>
+
+  <!-- DONE -->
+  <section class="screen" id="done">
+    <div class="done-art">✦</div>
+    <h2 style="text-align:center">That's all of them.</h2>
+    <p class="muted" style="text-align:center;margin-top:10px">Thank you. You can put the phone down now.</p>
+    <p style="text-align:center;margin-top:36px"><button class="btn solid" id="shareBtn">Send results</button></p>
+    <p class="status" id="shareStatus" style="text-align:center;margin-top:10px"></p>
+    <p style="text-align:center;margin-top:40px"><button class="link" id="doneResults">results</button></p>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="screen" id="results">
+    <div class="top"><h2>What she likes</h2><button class="link" id="backBtn">Setup</button></div>
+    <div class="kpi" id="kpi"></div>
+    <p class="status">Rates below are the share of rings with that attribute she said yes or love to. Small counts are noisy; trust rows with 10+.</p>
+    <div id="attrs"></div>
+    <div class="attr"><h3>Head‑to‑head ranking</h3><div class="rank" id="rank"></div></div>
+    <div class="row" style="margin-top:26px">
+      <button class="btn solid" id="exportBtn">Download results (JSON)</button>
+      <button class="btn" id="copyBtn">Copy summary</button>
+    </div>
+    <p class="status" id="resStatus" style="margin-top:10px"></p>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const K = { manifest:'ringswipe:manifest', ratings:'ringswipe:ratings', order:'ringswipe:order', pairs:'ringswipe:pairs' };
+  const store = {
+    async get(k){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; }catch{ return null; } },
+    async set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ console.error('save failed',e); } },
+    async del(k){ try{ localStorage.removeItem(k); }catch{} }
+  };
+
+  let rings = [], ratings = {}, order = [], history = [];
+  let pairs = { pool:[], queue:[], done:[], i:0 };
+  const fileMap = {};
+
+  // ---------- CSV ----------
+  function parseCSV(text){
+    const rows=[]; let row=[], cell='', q=false;
+    for(let i=0;i<text.length;i++){
+      const c=text[i];
+      if(q){ if(c=='"'){ if(text[i+1]=='"'){cell+='"';i++;} else q=false; } else cell+=c; }
+      else if(c=='"') q=true;
+      else if(c==','){ row.push(cell); cell=''; }
+      else if(c=='\n'||c=='\r'){ if(c=='\r'&&text[i+1]=='\n') i++; row.push(cell); rows.push(row); row=[]; cell=''; }
+      else cell+=c;
+    }
+    if(cell.length||row.length){ row.push(cell); rows.push(row); }
+    const hdr = rows.shift().map(h=>h.trim().toLowerCase());
+    return rows.filter(r=>r.some(v=>v.trim())).map((r,n)=>{
+      const o={}; hdr.forEach((h,i)=>o[h]=(r[i]||'').trim());
+      if(!o.id) o.id='r'+(n+1);
+      return o;
+    });
+  }
+  const placeholder = seed => {
+    const w=[3,4,5,6][seed%4], h=['#C9A45C','#B0B4B8','#D9B7A8','#E3C36B'][seed%4];
+    return 'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 250"><rect width="200" height="250" fill="#fff"/><circle cx="100" cy="150" r="55" fill="none" stroke="${h}" stroke-width="${w}"/><polygon points="100,55 125,80 100,105 75,80" fill="none" stroke="#333" stroke-width="2"/><text x="100" y="235" font-size="11" text-anchor="middle" fill="#999" font-family="sans-serif">placeholder ${seed+1}</text></svg>`);
+  };
+  const src = r => {
+    const im = r.image||'';
+    if(fileMap[im]) return fileMap[im];
+    if(im) return im;
+    return placeholder(rings.indexOf(r));
+  };
+  const attrKeys = () => Object.keys(rings[0]||{}).filter(k=>!['id','image','name','url','price','source'].includes(k));
+
+  // ---------- screens ----------
+  const show = id => { document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on', s.id===id)); window.scrollTo(0,0); };
+
+  // ---------- setup ----------
+  const SAMPLE = `id,image,era,cut,stone,setting,metal,details,band,size,type
+r1,,art deco,old european,diamond,solitaire,platinum,filigree,thin,medium,antique
+r2,,edwardian,old mine,diamond,halo,platinum,milgrain,thin,small,antique
+r3,,victorian,rose cut,diamond,cluster,yellow gold,engraving,medium,small,antique
+r4,,modern,oval,diamond,solitaire,yellow gold,none,thin,medium,new
+r5,,retro,transitional,diamond,bezel,rose gold,none,wide,medium,antique
+r6,,art deco,emerald,sapphire,three-stone,platinum,filigree,medium,large,antique
+r7,,modern,round brilliant,diamond,hidden halo,white gold,pavé,thin,medium,new
+r8,,victorian,old mine,diamond,toi et moi,yellow gold,none,medium,small,antique`;
+
+  $('sampleBtn').onclick = () => { $('csv').value = SAMPLE; };
+  $('csvFile').onchange = e => {
+    const f = e.target.files[0]; if(!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { $('csv').value = rd.result; store.set(K.manifest, rd.result); $('csvLabel').firstChild.textContent = `${f.name} loaded`; $('setupStatus').textContent = 'Ring list loaded. Tap Start swiping.'; };
+    rd.readAsText(f);
+  };
+  $('files').onchange = e => {
+    for(const f of e.target.files) fileMap[f.name] = URL.createObjectURL(f);
+    $('fileLabel').firstChild.textContent = `${Object.keys(fileMap).length} image files ready`;
+  };
+  $('csv').oninput = () => store.set(K.manifest, $('csv').value);
+
+  $('startBtn').onclick = async () => {
+    const text = $('csv').value.trim();
+    if(!text){ $('setupStatus').innerHTML='Paste a ring list first, or load the sample.'; return; }
+    try{ rings = parseCSV(text); }catch{ $('setupStatus').textContent='That CSV did not parse. Check for a header row and consistent columns.'; return; }
+    if(rings.length<2){ $('setupStatus').textContent='Need at least two rings.'; return; }
+    await store.set(K.manifest, text);
+    const ids = rings.map(r=>r.id);
+    if(!order.length || order.some(id=>!ids.includes(id)) || order.length!==ids.length){
+      order = ids.slice(); for(let i=order.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [order[i],order[j]]=[order[j],order[i]]; }
+      ratings = {}; pairs = {pool:[],queue:[],done:[],i:0};
+      await store.set(K.order, order); await store.set(K.ratings, ratings); await store.set(K.pairs, pairs);
+    }
+    if(Object.keys(ratings).length >= order.length) { pairs.queue.length ? startPairs() : show('done'); }
+    else startSwipe();
+  };
+  $('resultsBtn').onclick = () => { if(!rings.length && $('csv').value.trim()) rings = parseCSV($('csv').value.trim()); renderResults(); show('results'); };
+  $('backBtn').onclick = () => show('setup');
+  $('doneResults').onclick = () => { renderResults(); show('results'); };
+  $('resetBtn').onclick = async () => {
+    if(!confirm('Erase all swipes, pairs and the ring list?')) return;
+    for(const k of Object.values(K)) await store.del(k);
+    rings=[]; ratings={}; order=[]; history=[]; pairs={pool:[],queue:[],done:[],i:0}; $('csv').value='';
+    $('setupStatus').textContent='Cleared.';
+  };
+
+  // ---------- swipe ----------
+  const pending = () => order.filter(id=>!(id in ratings));
+  const byId = id => rings.find(r=>r.id===id);
+  let cardEl=null, backEl=null;
+
+  function startSwipe(){ show('swipe'); renderCard(); }
+  function renderCard(){
+    const tray=$('tray'); tray.innerHTML='';
+    const left = pending();
+    $('tot').textContent = order.length; $('cur').textContent = Math.min(order.length - left.length + 1, order.length);
+    $('prog').style.width = ((order.length-left.length)/order.length*100)+'%';
+    if(!left.length){ return finishSwipe(); }
+    if(left[1]){ backEl=document.createElement('div'); backEl.className='card back'; backEl.innerHTML=`<img src="${src(byId(left[1]))}" alt="">`; tray.appendChild(backEl); }
+    cardEl=document.createElement('div'); cardEl.className='card'; cardEl.dataset.id=left[0];
+    cardEl.innerHTML=`<img src="${src(byId(left[0]))}" alt="Ring"><span class="stamp yes">Yes</span><span class="stamp no">No</span><span class="stamp love">Love</span>`;
+    tray.appendChild(cardEl); attachDrag(cardEl);
+  }
+  async function rate(id, val){
+    ratings[id]=val; history.push(id); await store.set(K.ratings, ratings);
+  }
+  function fly(dir){ // dir: 'yes'|'no'|'love'
+    if(!cardEl) return; const id=cardEl.dataset.id; const el=cardEl; cardEl=null;
+    el.classList.add('leave');
+    el.style.transform = dir==='no' ? 'translate(-140%,20px) rotate(-25deg)' : dir==='yes' ? 'translate(140%,20px) rotate(25deg)' : 'translateY(-160%) scale(.9)';
+    el.style.opacity='0';
+    rate(id,dir).then(()=>setTimeout(renderCard,120));
+  }
+  $('noBtn').onclick=()=>fly('no'); $('yesBtn').onclick=()=>fly('yes'); $('loveBtn').onclick=()=>fly('love');
+  $('undoBtn').onclick=async()=>{ const id=history.pop(); if(!id) return; delete ratings[id]; await store.set(K.ratings,ratings); renderCard(); };
+  document.addEventListener('keydown',e=>{
+    if(!$('swipe').classList.contains('on')) return;
+    if(e.key==='ArrowRight') fly('yes'); if(e.key==='ArrowLeft') fly('no'); if(e.key==='ArrowUp') fly('love');
+    if(e.key==='z'||e.key==='Backspace') $('undoBtn').click();
+  });
+  function attachDrag(el){
+    let sx=0,sy=0,dx=0,dy=0,drag=false;
+    const st = {yes:el.querySelector('.stamp.yes'), no:el.querySelector('.stamp.no'), love:el.querySelector('.stamp.love')};
+    el.addEventListener('pointerdown',e=>{ drag=true; sx=e.clientX; sy=e.clientY; el.setPointerCapture(e.pointerId); el.classList.remove('leave'); });
+    el.addEventListener('pointermove',e=>{
+      if(!drag) return; dx=e.clientX-sx; dy=e.clientY-sy;
+      el.style.transform=`translate(${dx}px,${dy}px) rotate(${dx/18}deg)`;
+      const up = dy<-70 && Math.abs(dx)<80;
+      st.yes.style.opacity = !up && dx>30 ? Math.min(1,(dx-30)/70) : 0;
+      st.no.style.opacity  = !up && dx<-30 ? Math.min(1,(-dx-30)/70) : 0;
+      st.love.style.opacity= up ? Math.min(1,(-dy-70)/60) : 0;
+    });
+    const end = () => {
+      if(!drag) return; drag=false;
+      if(dy<-120 && Math.abs(dx)<80) return fly('love');
+      if(dx>110) return fly('yes'); if(dx<-110) return fly('no');
+      el.style.transition='transform .25s'; el.style.transform=''; Object.values(st).forEach(s=>s.style.opacity=0);
+      setTimeout(()=>el.style.transition='',260); dx=dy=0;
+    };
+    el.addEventListener('pointerup',end); el.addEventListener('pointercancel',end);
+  }
+
+  // ---------- pairs ----------
+  async function finishSwipe(){
+    const loves = order.filter(id=>ratings[id]==='love'), yes = order.filter(id=>ratings[id]==='yes');
+    let pool = loves.slice(); for(const id of yes){ if(pool.length>=16) break; pool.push(id); }
+    if(pool.length>16) pool=pool.slice(0,16);
+    if(pool.length<4){ pairs={pool,queue:[],done:[],i:0}; await store.set(K.pairs,pairs); return show('done'); }
+    const n=pool.length, set=new Set(), queue=[];
+    const k = n>=8 ? 4 : n-1;
+    for(let i=0;i<n;i++) for(let d=1;d<=k;d++){ const j=(i+d)%n; const key=[Math.min(i,j),Math.max(i,j)].join('-'); if(!set.has(key)){ set.add(key); queue.push([pool[i],pool[j]]); } }
+    for(let i=queue.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [queue[i],queue[j]]=[queue[j],queue[i]]; }
+    pairs={pool,queue,done:[],i:0}; await store.set(K.pairs,pairs); startPairs();
+  }
+  function startPairs(){ show('pairs'); renderPair(); }
+  function renderPair(){
+    const {queue,i}=pairs; $('ptot').textContent=queue.length; $('pcur').textContent=Math.min(i+1,queue.length);
+    $('pprog').style.width=(i/queue.length*100)+'%';
+    if(i>=queue.length) return show('done');
+    const [a,b]=queue[i]; const flip=Math.random()<.5; const L=flip?b:a, R=flip?a:b;
+    $('pickA').dataset.id=L; $('pickB').dataset.id=R;
+    $('pickA').querySelector('img').src=src(byId(L)); $('pickB').querySelector('img').src=src(byId(R));
+  }
+  async function choose(id){ const [a,b]=pairs.queue[pairs.i]; pairs.done.push([a,b,id]); pairs.i++; await store.set(K.pairs,pairs); renderPair(); }
+  $('pickA').onclick=e=>choose(e.currentTarget.dataset.id); $('pickB').onclick=e=>choose(e.currentTarget.dataset.id);
+
+  // ---------- results ----------
+  function analysis(){
+    const rated = rings.filter(r=>r.id in ratings);
+    const attrs={};
+    for(const k of attrKeys()){
+      const m={};
+      for(const r of rated){ const v=(r[k]||'—').toLowerCase(); m[v]??={n:0,yes:0,love:0}; m[v].n++; if(ratings[r.id]!=='no') m[v].yes++; if(ratings[r.id]==='love') m[v].love++; }
+      attrs[k]=Object.entries(m).map(([v,s])=>({value:v,n:s.n,yesRate:s.yes/s.n,loveRate:s.love/s.n})).sort((a,b)=>b.yesRate-a.yesRate||b.n-a.n);
+    }
+    const wins={}, played={}; for(const [a,b,w] of pairs.done){ wins[w]=(wins[w]||0)+1; played[a]=(played[a]||0)+1; played[b]=(played[b]||0)+1; }
+    const ranking = pairs.pool.map(id=>({id,wins:wins[id]||0,played:played[id]||0,rating:ratings[id]})).sort((a,b)=>b.wins-a.wins||(b.rating==='love')-(a.rating==='love'));
+    return {ratedCount:rated.length,total:rings.length,counts:{no:rated.filter(r=>ratings[r.id]==='no').length,yes:rated.filter(r=>ratings[r.id]==='yes').length,love:rated.filter(r=>ratings[r.id]==='love').length},attrs,ranking,pairsDone:pairs.done.length};
+  }
+  function renderResults(){
+    const A=analysis();
+    $('kpi').innerHTML=`<div>${A.counts.love}<span>loved</span></div><div>${A.counts.yes}<span>yes</span></div><div>${A.counts.no}<span>no</span></div><div>${A.ratedCount}/${A.total}<span>rated</span></div>`;
+    $('attrs').innerHTML=Object.entries(A.attrs).map(([k,rows])=>`<div class="attr"><h3>${k}</h3><table><tr><th>value</th><th style="text-align:right">n</th><th style="text-align:right">yes or love</th><th style="text-align:right">love</th></tr>${rows.map(r=>`<tr><td>${r.value}</td><td class="n">${r.n}</td><td class="r"><span class="meter"><i style="width:${r.yesRate*100}%"></i></span>${Math.round(r.yesRate*100)}%</td><td class="r">${Math.round(r.loveRate*100)}%</td></tr>`).join('')}</table></div>`).join('');
+    $('rank').innerHTML=A.ranking.length?A.ranking.slice(0,9).map((r,i)=>`<figure><img src="${src(byId(r.id))}" alt=""><figcaption>${i+1} · ${r.wins}/${r.played}</figcaption></figure>`).join(''):'<p class="status">Round two runs once the swipe round is finished and there are at least four rings she liked.</p>';
+    $('resStatus').textContent = A.ranking.length ? `Captions show rank, then wins out of matches played.` : '';
+  }
+  function resultsFile(){
+    const A=analysis();
+    const out={exported:new Date().toISOString(),summary:A,ratings,pairs:pairs.done,rings};
+    return new File([JSON.stringify(out,null,2)],'ring-results.json',{type:'application/json'});
+  }
+  $('shareBtn').onclick=async()=>{
+    const f=resultsFile();
+    if(navigator.canShare && navigator.canShare({files:[f]})){
+      try{ await navigator.share({files:[f],title:'Ring results'}); $('shareStatus').textContent='Sent.'; }catch{}
+    } else {
+      const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; a.click();
+      $('shareStatus').textContent='Downloaded ring-results.json — send that file over.';
+    }
+  };
+  $('exportBtn').onclick=()=>{
+    const A=analysis();
+    const out={exported:new Date().toISOString(),summary:A,ratings,pairs:pairs.done,rings};
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,2)],{type:'application/json'})); a.download='ring-results.json'; a.click();
+  };
+  $('copyBtn').onclick=async()=>{
+    const A=analysis(); let t=`Ring results (${A.ratedCount}/${A.total} rated; love ${A.counts.love}, yes ${A.counts.yes}, no ${A.counts.no})\n`;
+    for(const [k,rows] of Object.entries(A.attrs)) t+=`\n${k}\n`+rows.map(r=>`  ${r.value}: ${Math.round(r.yesRate*100)}% yes/love, ${Math.round(r.loveRate*100)}% love (n=${r.n})`).join('\n')+'\n';
+    if(A.ranking.length) t+=`\nhead-to-head ranking\n`+A.ranking.map((r,i)=>`  ${i+1}. ${r.id} — ${r.wins}/${r.played} wins`).join('\n');
+    try{ await navigator.clipboard.writeText(t); $('resStatus').textContent='Summary copied.'; }catch{ $('resStatus').textContent='Copy blocked by the browser; use the JSON download instead.'; }
+  };
+
+  // ---------- boot ----------
+  (async()=>{
+    ratings=(await store.get(K.ratings))||{}; order=(await store.get(K.order))||[]; pairs=(await store.get(K.pairs))||pairs;
+    let auto=false;
+    try{ const r=await fetch('rings.csv',{cache:'no-store'}); if(r.ok){ const t=await r.text(); if(t.trim()){ $('csv').value=t; rings=parseCSV(t); await store.set(K.manifest,t); auto=true; } } }catch{}
+    if(!auto){ const m=await store.get(K.manifest); if(m){ $('csv').value=m; try{ rings=parseCSV(m); }catch{} } }
+    if(rings.length && order.length){
+      const left=order.filter(id=>!(id in ratings)).length;
+      $('setupStatus').innerHTML = left ? `Saved progress: <b>${order.length-left}</b> of ${order.length} swiped. Start swiping picks up where she left off.` : `Swipe round finished. ${pairs.done.length}/${pairs.queue.length||0} head‑to‑head picks done.`;
+    }
+    if(auto && location.hash!=='#setup'){ $('startBtn').click(); } else show('setup');
+  })();
+})();
+</script>
+</body>
+</html>
