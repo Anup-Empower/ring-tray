@@ -68,6 +68,10 @@
   .act.love svg{width:32px;height:32px}
   .hint{text-align:center;font-size:13px;color:var(--ivory-dim);margin-top:14px}
   .undo{font-size:14px;color:var(--ivory-dim)}
+  #note{width:100%;margin-top:14px;font-family:var(--sans);font-size:14px;background:var(--velvet-2);color:var(--ivory);border:1px solid var(--line);border-radius:999px;padding:11px 16px;text-align:center}
+  #note::placeholder{color:var(--ivory-dim)}
+  #note:focus{outline:none;border-color:var(--brass)}
+  #note.has{border-color:var(--brass)}
 
   /* pairs */
   .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1;align-content:center}
@@ -144,6 +148,7 @@
       <button class="act love" id="loveBtn" aria-label="Love it"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 8.3a4.2 4.2 0 0 1 7.5 2.2c0 5.4-7.5 10-7.5 10z"/></svg></button>
       <button class="act yes" id="yesBtn" aria-label="Yes"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
     </div>
+    <input type="text" id="note" autocomplete="off" placeholder="add a note (optional) — e.g. love the band, not the stone">
     <p class="hint">Swipe right for yes, left for no, up if you love it. Go with your gut.</p>
   </section>
 
@@ -180,6 +185,7 @@
     <p class="status">Rates below are the share of rings with that attribute she said yes or love to. Small counts are noisy; trust rows with 10+.</p>
     <div id="attrs"></div>
     <div class="attr"><h3>Head‑to‑head ranking</h3><div class="rank" id="rank"></div></div>
+    <div class="attr" id="notesBlock" style="display:none"></div>
     <div class="row" style="margin-top:26px">
       <button class="btn solid" id="exportBtn">Download results (JSON)</button>
       <button class="btn" id="copyBtn">Copy summary</button>
@@ -191,14 +197,29 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const K = { manifest:'ringswipe:manifest', ratings:'ringswipe:ratings', order:'ringswipe:order', pairs:'ringswipe:pairs' };
+  const K = { manifest:'ringswipe2:manifest', ratings:'ringswipe2:ratings', order:'ringswipe2:order', pairs:'ringswipe2:pairs', notes:'ringswipe2:notes', session:'ringswipe2:session' };
   const store = {
     async get(k){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; }catch{ return null; } },
     async set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ console.error('save failed',e); } },
     async del(k){ try{ localStorage.removeItem(k); }catch{} }
   };
 
-  let rings = [], ratings = {}, order = [], history = [];
+  // ---------- live backend (Supabase: insert-only, publishable key is safe to embed) ----------
+  const SUPA_URL = 'https://jbgpjehvesokthbvtobn.supabase.co';
+  const SUPA_KEY = 'sb_publishable_TnSQZSOu5WV4lZfP-tq8Jg_pW-7vIl5';
+  const sessionId = (()=>{ try{ let s=localStorage.getItem(K.session); if(!s){ s=Date.now().toString(36)+Math.random().toString(36).slice(2,8); localStorage.setItem(K.session,s); } return s; }catch{ return 'anon'+Math.random().toString(36).slice(2,8); } })();
+  function post(action, id, comment){
+    try{
+      const r = byId(id) || {};
+      fetch(SUPA_URL+'/rest/v1/swipes', {
+        method:'POST', keepalive:true,
+        headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'application/json', 'Prefer':'return=minimal' },
+        body: JSON.stringify({ session_id:sessionId, ring_id:id, ring_title:(r.details||'').slice(0,200), ring_source:r.source||'', action:action, comment:(comment||null) })
+      }).catch(()=>{});
+    }catch{}
+  }
+
+  let rings = [], ratings = {}, order = [], history = [], notes = {};
   let pairs = { pool:[], queue:[], done:[], i:0 };
   const fileMap = {};
 
@@ -281,7 +302,7 @@ r8,,victorian,old mine,diamond,toi et moi,yellow gold,none,medium,small,antique`
   $('resetBtn').onclick = async () => {
     if(!confirm('Erase all swipes, pairs and the ring list?')) return;
     for(const k of Object.values(K)) await store.del(k);
-    rings=[]; ratings={}; order=[]; history=[]; pairs={pool:[],queue:[],done:[],i:0}; $('csv').value='';
+    rings=[]; ratings={}; order=[]; history=[]; notes={}; pairs={pool:[],queue:[],done:[],i:0}; $('csv').value='';
     $('setupStatus').textContent='Cleared.';
   };
 
@@ -301,21 +322,27 @@ r8,,victorian,old mine,diamond,toi et moi,yellow gold,none,medium,small,antique`
     cardEl=document.createElement('div'); cardEl.className='card'; cardEl.dataset.id=left[0];
     cardEl.innerHTML=`<img src="${src(byId(left[0]))}" alt="Ring"><span class="stamp yes">Yes</span><span class="stamp no">No</span><span class="stamp love">Love</span>`;
     tray.appendChild(cardEl); attachDrag(cardEl);
+    const ni=$('note'); if(ni){ ni.value = notes[left[0]]||''; ni.classList.toggle('has', !!notes[left[0]]); }
   }
-  async function rate(id, val){
-    ratings[id]=val; history.push(id); await store.set(K.ratings, ratings);
+  async function rate(id, val, note){
+    ratings[id]=val; history.push(id);
+    if(note){ notes[id]=note; await store.set(K.notes, notes); }
+    await store.set(K.ratings, ratings);
+    post(val, id, note || notes[id] || '');
   }
   function fly(dir){ // dir: 'yes'|'no'|'love'
     if(!cardEl) return; const id=cardEl.dataset.id; const el=cardEl; cardEl=null;
+    const ni=$('note'); const note=ni?ni.value.trim():''; if(ni){ ni.value=''; ni.classList.remove('has'); }
     el.classList.add('leave');
     el.style.transform = dir==='no' ? 'translate(-140%,20px) rotate(-25deg)' : dir==='yes' ? 'translate(140%,20px) rotate(25deg)' : 'translateY(-160%) scale(.9)';
     el.style.opacity='0';
-    rate(id,dir).then(()=>setTimeout(renderCard,120));
+    rate(id,dir,note).then(()=>setTimeout(renderCard,120));
   }
   $('noBtn').onclick=()=>fly('no'); $('yesBtn').onclick=()=>fly('yes'); $('loveBtn').onclick=()=>fly('love');
   $('undoBtn').onclick=async()=>{ const id=history.pop(); if(!id) return; delete ratings[id]; await store.set(K.ratings,ratings); renderCard(); };
   document.addEventListener('keydown',e=>{
     if(!$('swipe').classList.contains('on')) return;
+    if(e.target && (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')) return;
     if(e.key==='ArrowRight') fly('yes'); if(e.key==='ArrowLeft') fly('no'); if(e.key==='ArrowUp') fly('love');
     if(e.key==='z'||e.key==='Backspace') $('undoBtn').click();
   });
@@ -362,7 +389,7 @@ r8,,victorian,old mine,diamond,toi et moi,yellow gold,none,medium,small,antique`
     $('pickA').dataset.id=L; $('pickB').dataset.id=R;
     $('pickA').querySelector('img').src=src(byId(L)); $('pickB').querySelector('img').src=src(byId(R));
   }
-  async function choose(id){ const [a,b]=pairs.queue[pairs.i]; pairs.done.push([a,b,id]); pairs.i++; await store.set(K.pairs,pairs); renderPair(); }
+  async function choose(id){ const [a,b]=pairs.queue[pairs.i]; pairs.done.push([a,b,id]); pairs.i++; await store.set(K.pairs,pairs); post('pair_pick', id, ''); renderPair(); }
   $('pickA').onclick=e=>choose(e.currentTarget.dataset.id); $('pickB').onclick=e=>choose(e.currentTarget.dataset.id);
 
   // ---------- results ----------
@@ -384,10 +411,13 @@ r8,,victorian,old mine,diamond,toi et moi,yellow gold,none,medium,small,antique`
     $('attrs').innerHTML=Object.entries(A.attrs).map(([k,rows])=>`<div class="attr"><h3>${k}</h3><table><tr><th>value</th><th style="text-align:right">n</th><th style="text-align:right">yes or love</th><th style="text-align:right">love</th></tr>${rows.map(r=>`<tr><td>${r.value}</td><td class="n">${r.n}</td><td class="r"><span class="meter"><i style="width:${r.yesRate*100}%"></i></span>${Math.round(r.yesRate*100)}%</td><td class="r">${Math.round(r.loveRate*100)}%</td></tr>`).join('')}</table></div>`).join('');
     $('rank').innerHTML=A.ranking.length?A.ranking.slice(0,9).map((r,i)=>`<figure><img src="${src(byId(r.id))}" alt=""><figcaption>${i+1} · ${r.wins}/${r.played}</figcaption></figure>`).join(''):'<p class="status">Round two runs once the swipe round is finished and there are at least four rings she liked.</p>';
     $('resStatus').textContent = A.ranking.length ? `Captions show rank, then wins out of matches played.` : '';
+    const noted=Object.keys(notes).filter(id=>notes[id] && byId(id)); const nb=$('notesBlock');
+    if(noted.length){ nb.style.display=''; nb.innerHTML='<h3>Her notes</h3>'+noted.map(id=>{ const r=byId(id); const tag=ratings[id]||''; return `<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(246,241,232,.07)"><img src="${src(r)}" alt="" style="width:46px;height:46px;object-fit:contain;background:#fff;border-radius:6px;flex:none"><div><div style="font-size:13px">${(r.details||id)} ${tag?`· <span style="color:var(--brass)">${tag}</span>`:''}</div><div class="muted" style="font-size:13px">&ldquo;${notes[id].replace(/</g,'&lt;')}&rdquo;</div></div></div>`; }).join(''); }
+    else { nb.style.display='none'; }
   }
   function resultsFile(){
     const A=analysis();
-    const out={exported:new Date().toISOString(),summary:A,ratings,pairs:pairs.done,rings};
+    const out={exported:new Date().toISOString(),summary:A,ratings,notes,pairs:pairs.done,rings};
     return new File([JSON.stringify(out,null,2)],'ring-results.json',{type:'application/json'});
   }
   $('shareBtn').onclick=async()=>{
@@ -401,7 +431,7 @@ r8,,victorian,old mine,diamond,toi et moi,yellow gold,none,medium,small,antique`
   };
   $('exportBtn').onclick=()=>{
     const A=analysis();
-    const out={exported:new Date().toISOString(),summary:A,ratings,pairs:pairs.done,rings};
+    const out={exported:new Date().toISOString(),summary:A,ratings,notes,pairs:pairs.done,rings};
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,2)],{type:'application/json'})); a.download='ring-results.json'; a.click();
   };
   $('copyBtn').onclick=async()=>{
@@ -413,7 +443,7 @@ r8,,victorian,old mine,diamond,toi et moi,yellow gold,none,medium,small,antique`
 
   // ---------- boot ----------
   (async()=>{
-    ratings=(await store.get(K.ratings))||{}; order=(await store.get(K.order))||[]; pairs=(await store.get(K.pairs))||pairs;
+    ratings=(await store.get(K.ratings))||{}; order=(await store.get(K.order))||[]; pairs=(await store.get(K.pairs))||pairs; notes=(await store.get(K.notes))||{};
     let auto=false;
     try{ const r=await fetch('rings.csv',{cache:'no-store'}); if(r.ok){ const t=await r.text(); if(t.trim()){ $('csv').value=t; rings=parseCSV(t); await store.set(K.manifest,t); auto=true; } } }catch{}
     if(!auto){ const m=await store.get(K.manifest); if(m){ $('csv').value=m; try{ rings=parseCSV(m); }catch{} } }

@@ -1,0 +1,9 @@
+.venv/
+build_site.py
+rings_source.csv
+rings_source_OLD.csv.bak
+*.log
+*.bak
+.supabase_config.txt
+.supabase_db_password.txt
+.DS_Store
